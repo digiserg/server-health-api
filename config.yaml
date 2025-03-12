@@ -1,0 +1,32 @@
+config:
+  listen:
+    host: 0.0.0.0
+    port: 7654
+  ssl:
+    enabled: false
+    cert: /path/to/cert.pem
+    key: /path/to/key.pem
+  auth:
+    enabled: false
+    username: admin
+    password: password
+
+services:
+  - name: sshd
+    status: running
+
+ports:
+  - name: ssh
+    address: 127.0.0.1
+    port: 22
+  - name: http
+    address: 127.0.0.1
+    port: 80
+
+endpoints:
+  - name: my-app
+    url: http://localhost
+    status: 200
+  - name: external-api
+    url: http://api.example.com
+    status: 404
