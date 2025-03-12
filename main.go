@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -59,7 +61,11 @@ type Endpoint struct {
 var outputMessages []string
 
 func main() {
-	config, err := readConfig("config.yaml")
+	configFilePath := flag.String("config", GetEnv("HEALTHCHECK_CONFIG_FILE", "config.yaml"), "Path to the config file")
+
+	flag.Parse()
+
+	config, err := readConfig(*configFilePath)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -142,7 +148,20 @@ func checkPorts(ports []Port) bool {
 func checkEndpoints(endpoints []Endpoint) bool {
 	var err_count int
 	for _, endpoint := range endpoints {
-		resp, err := http.Get(endpoint.URL)
+		var resp *http.Response
+		var err error
+
+		if strings.HasPrefix(endpoint.URL, "https://") {
+			// Disable SSL verification
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			client := &http.Client{Transport: tr}
+			resp, err = client.Get(endpoint.URL)
+		} else {
+			resp, err = http.Get(endpoint.URL)
+		}
+
 		if err != nil {
 			addToOutputMessages("Endpoint Name: %s, URL: %s is not reachable", endpoint.Name, endpoint.URL)
 			err_count++

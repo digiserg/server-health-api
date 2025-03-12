@@ -4,8 +4,8 @@ config:
     port: 7654
   ssl:
     enabled: false
-    cert: /path/to/cert.pem
-    key: /path/to/key.pem
+    certFile: /path/to/cert.pem
+    keyFile: /path/to/key.pem
   auth:
     enabled: false
     username: admin
@@ -13,7 +13,7 @@ config:
 
 services:
   - name: sshd
-    status: running
+    status: active
 
 ports:
   - name: ssh
