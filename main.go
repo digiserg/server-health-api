@@ -70,7 +70,7 @@ func main() {
 		log.Fatalf("error: %v", err)
 	}
 
-	http.HandleFunc("/healthy", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/healthy", basicAuthMiddleware(config.Config.Auth, func(w http.ResponseWriter, r *http.Request) {
 		outputMessages = []string{} // Reinitialize outputMessages
 		response := make(map[string]interface{})
 		if !checkPorts(config.Ports) || !checkServices(config.Services) || !checkEndpoints(config.Endpoints) {
@@ -82,7 +82,7 @@ func main() {
 		}
 		response["messages"] = outputMessages
 		json.NewEncoder(w).Encode(response)
-	})
+	}))
 
 	l := fmt.Sprintf("%s:%d", GetEnv("HEALTH_LISTEN_HOST", config.Config.Listen.Host), GetEnvInt("HEALTH_LISTEN_PORT", config.Config.Listen.Port))
 	log.Printf("Starting server on %s", l)
@@ -95,6 +95,24 @@ func main() {
 
 	if serverErr != nil {
 		log.Fatalf("Failed to start server: %v", serverErr)
+	}
+}
+
+func basicAuthMiddleware(authConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authConfig.Enabled {
+			username, password, ok := r.BasicAuth()
+			if !ok || username != authConfig.Username || password != authConfig.Password {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		next(w, r)
 	}
 }
 

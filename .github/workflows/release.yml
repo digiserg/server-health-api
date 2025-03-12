@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.23
+
+    - name: Build binary
+      run: |
+        GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+
+    - name: Create release assets
+      run: |
+        sudo apt-get install ruby-dev build-essential && sudo gem i fpm -f
+        TAG=${{ github.event.release.tag_name }}
+        VERSION=${TAG#v}
+
+        mkdir -p release
+        zip -j release/server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}.zip server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+        fpm -s dir -t rpm -n server-health-api -v ${VERSION} --prefix /usr/local/bin server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+        fpm -s dir -t deb -n server-health-api -v ${VERSION} --prefix /usr/local/bin server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+        mv *.rpm release/
+        mv *.deb release/
+
+    - name: Upload release assets
+      uses: actions/upload-artifact@v2
+      with:
+        name: release-assets
+        path: release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download release assets
+      uses: actions/download-artifact@v2
+      with:
+        name: release-assets
+        path: release/
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,7 +7,7 @@ config:
     certFile: /path/to/cert.pem
     keyFile: /path/to/key.pem
   auth:
-    enabled: false
+    enabled: true
     username: admin
     password: password
 
