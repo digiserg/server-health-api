@@ -73,7 +73,7 @@ jobs:
         mkdir -p release
 
         for p in deb rpm zip; do
-          fpm -s dir -t ${p} --after-install resouces/post_install.sh \
+          fpm -s dir -t ${p} --after-install resources/post_install.sh \
             -n server-health-api -v ${VERSION} \
             server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}=/usr/local/bin/server-health-api \
             resources/server-health-api.service=/etc/systemd/system/server-health-api.service \
