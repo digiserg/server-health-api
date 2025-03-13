@@ -1,0 +1,11 @@
+[Unit]
+Description=Server Health API
+After=network.target
+
+[Service]
+User=health
+ExecStart=/usr/local/bin/server-health-api -c /usr/local/etc/server-health-api.yaml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

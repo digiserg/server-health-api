@@ -29,16 +29,23 @@ jobs:
 
     - name: Create release assets
       run: |
-        sudo apt-get install ruby-dev build-essential && sudo gem i fpm -f
+        sudo apt-get -y install rpm ruby-dev build-essential && sudo gem i fpm -f
         TAG=${{ github.event.release.tag_name }}
         VERSION=${TAG#v}
 
         mkdir -p release
-        zip -j release/server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}.zip server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
-        fpm -s dir -t rpm -n server-health-api -v ${VERSION} --prefix /usr/local/bin server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
-        fpm -s dir -t deb -n server-health-api -v ${VERSION} --prefix /usr/local/bin server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+
+        for p in deb rpm zip; do
+          fpm -s dir -t ${p} --after-install resouces/post_install.sh \
+            -n server-health-api -v ${VERSION} \
+            server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}=/usr/local/bin/server-health-api \
+            resources/server-health-api.service=/etc/systemd/system/server-health-api.service \
+            config.yaml=/usr/local/etc/server-health-api.yaml
+        done
+
         mv *.rpm release/
         mv *.deb release/
+        mv *.zip release/
 
     - name: Upload release assets
       uses: actions/upload-artifact@v2
