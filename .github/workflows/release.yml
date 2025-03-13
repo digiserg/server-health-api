@@ -5,9 +5,43 @@ on:
     tags:
       - 'v*'
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Fail if tag is not prefixed by v
+        run: |
+          if [[ $GITHUB_REF_NAME =~ ^v[0-9]+\.[0-9]+\.[0-9].* ]]; then
+              echo "Valid version format"
+          else
+              echo "Invalid version format"
+              exit 1
+          fi
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+        run: |
+          OPTIONS=""
+          if [[ $GITHUB_REF_NAME == *"internal"* ]]; then
+            OPTIONS="--prerelease"
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="Release for ${GITHUB_REF_NAME}" \
+              --generate-notes $OPTIONS
   build:
     runs-on: ubuntu-latest
+    needs: [release]
 
     strategy:
       matrix:
