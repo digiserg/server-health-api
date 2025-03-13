@@ -43,7 +43,7 @@ jobs:
               --title="Release for ${GITHUB_REF_NAME}" \
               --generate-notes $OPTIONS
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs: [release]
 
     strategy:
@@ -66,7 +66,7 @@ jobs:
 
     - name: Build binary
       run: |
-        GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+        go build -o server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
 
     - name: Create release assets
       run: |
