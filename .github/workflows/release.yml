@@ -66,7 +66,7 @@ jobs:
 
     - name: Build binary
       run: |
-        go build -o server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
+        CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -a -ldflags '-extldflags "-static"' -o server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
 
     - name: Create release assets
       run: |
