@@ -71,7 +71,7 @@ jobs:
         VERSION=${TAG#v}
 
         mkdir -p release
-
+        set -x
         for p in deb rpm zip; do
           fpm -s dir -t ${p} --after-install resources/post_install.sh \
             -n server-health-api -v ${VERSION} \
