@@ -67,8 +67,7 @@ jobs:
     - name: Create release assets
       run: |
         sudo apt-get -y install rpm ruby-dev build-essential && sudo gem i fpm -f
-        TAG=${{ github.event.release.tag_name }}
-        VERSION=${TAG#v}
+        VERSION=$(echo $GITHUB_REF_NAME | sed 's/^v//g')
 
         mkdir -p release
         set -x
