@@ -53,9 +53,10 @@ type Port struct {
 }
 
 type Endpoint struct {
-	Name   string `yaml:"name"`
-	URL    string `yaml:"url"`
-	Status int    `yaml:"status"`
+	Name     string `yaml:"name"`
+	URL      string `yaml:"url"`
+	Status   int    `yaml:"status"`
+	Statuses []int  `yaml:"statuses"`
 }
 
 var outputMessages []string
@@ -187,7 +188,7 @@ func checkEndpoints(endpoints []Endpoint) bool {
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode == endpoint.Status {
+		if resp.StatusCode == endpoint.Status || contains(endpoint.Statuses, resp.StatusCode) {
 			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is as expected", endpoint.Name, endpoint.URL, endpoint.Status)
 		} else {
 			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is not as expected, got: %d", endpoint.Name, endpoint.URL, endpoint.Status, resp.StatusCode)
@@ -218,4 +219,13 @@ func GetEnvInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func contains(numbers []int, target int) bool {
+	for _, num := range numbers {
+		if num == target {
+			return true
+		}
+	}
+	return false
 }

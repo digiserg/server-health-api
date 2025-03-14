@@ -30,3 +30,9 @@ endpoints:
   - name: external-api
     url: http://api.example.com
     status: 404
+  - name: other
+    url: http://something.example.com
+    statuses:
+      - 404
+      - 301
+      - 302
