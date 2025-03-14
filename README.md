@@ -1,5 +1,7 @@
 # Server Health API
 
+**NOTE:** This project was entirely created using Copilot Edits as a Proof of Concept
+
 This Go application checks the health of various services, ports, and endpoints on a server. It can be used to verify whether a server is healthy before performing maintenance on it.
 
 ## Features
@@ -38,6 +40,8 @@ endpoints:
   - name: "Google"
     url: "https://www.google.com"
     status: 200
+    # alternatively, use a list
+    #statuses: [200, 301]
 ```
 
 ## Running the Application
@@ -97,25 +101,7 @@ Example response:
 
 ## Command Line Options
 
-- `-config` or `-c`: Specify the path to the configuration file. This overrides the `HEALTHCHECK_CONFIG_FILE` environment variable.
-
-## Usage
-
-This application can be used to verify whether a server is healthy before performing maintenance on it. By checking the status of services, ports, and endpoints, you can ensure that everything is running as expected.
-
-### Example output
-
-```json
-{
-  "messages": [
-    "Port Name: ssh, Port: 22 is available",
-    "Port Name: http, Port: 8080 is available",
-    "Service Name: sshd, Status: active is as expected",
-    "Endpoint Name: nginx, URL: http://localhost:8080, Status: 404 is as expected"
-  ],
-  "status": "Server is healthy"
-}
-```
+- `-config`: Specify the path to the configuration file. This overrides the `HEALTHCHECK_CONFIG_FILE` environment variable.
 
 ## License
 
