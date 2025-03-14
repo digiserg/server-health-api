@@ -188,8 +188,9 @@ func checkEndpoints(endpoints []Endpoint) bool {
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode == endpoint.Status || contains(endpoint.Statuses, resp.StatusCode) {
-			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is as expected", endpoint.Name, endpoint.URL, endpoint.Status)
+		statuses := append(endpoint.Statuses, endpoint.Status)
+		if contains(statuses, resp.StatusCode) {
+			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is as expected", endpoint.Name, endpoint.URL, resp.StatusCode)
 		} else {
 			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is not as expected, got: %d", endpoint.Name, endpoint.URL, endpoint.Status, resp.StatusCode)
 			err_count++
