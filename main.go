@@ -1,3 +1,4 @@
+// Package main implements a server health monitoring API that checks services, ports, and endpoints.
 package main
 
 import (
@@ -36,14 +37,14 @@ type AppConfig struct {
 		Port int    `yaml:"port"`
 	} `yaml:"listen"`
 	SSL struct {
-		Enabled  bool   `yaml:"enabled"`
 		CertFile string `yaml:"certFile"`
 		KeyFile  string `yaml:"keyFile"`
+		Enabled  bool   `yaml:"enabled"`
 	} `yaml:"ssl"`
 	Auth struct {
-		Enabled  bool   `yaml:"enabled"`
 		Username string `yaml:"username"`
 		Password string `yaml:"password"`
+		Enabled  bool   `yaml:"enabled"`
 	} `yaml:"auth"`
 }
 
@@ -61,8 +62,8 @@ type Port struct {
 type Endpoint struct {
 	Name     string `yaml:"name"`
 	URL      string `yaml:"url"`
-	Status   int    `yaml:"status"`
 	Statuses []int  `yaml:"statuses"`
+	Status   int    `yaml:"status"`
 }
 
 func main() {
@@ -86,14 +87,17 @@ func main() {
 			response["status"] = "Server is healthy"
 		}
 		response["messages"] = messages
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Failed to encode response: %v", err)
+		}
 	}))
 
 	l := fmt.Sprintf("%s:%d", GetEnv("HEALTH_LISTEN_HOST", config.Config.Listen.Host), GetEnvInt("HEALTH_LISTEN_PORT", config.Config.Listen.Port))
 
 	server := &http.Server{
-		Addr:    l,
-		Handler: nil,
+		Addr:              l,
+		Handler:           nil,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	// Start server in a goroutine
@@ -125,9 +129,9 @@ func main() {
 }
 
 func basicAuthMiddleware(authConfig struct {
-	Enabled  bool   `yaml:"enabled"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	Enabled  bool   `yaml:"enabled"`
 }, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if authConfig.Enabled {
@@ -145,7 +149,7 @@ func basicAuthMiddleware(authConfig struct {
 }
 
 func readConfig(filename string) (*Config, error) {
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) // #nosec G304 -- filename is from command-line flag, not user input
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +205,7 @@ func checkServices(services []Service, messages *[]string) bool {
 			errCount++
 			continue
 		}
-		cmd := exec.Command("systemctl", "is-active", service.Name)
+		cmd := exec.Command("systemctl", "is-active", service.Name) // #nosec G204 -- service.Name is validated by regex
 		output, err := cmd.Output()
 		status := strings.TrimSpace(string(output))
 		if err != nil || status != service.Status {
@@ -224,7 +228,9 @@ func checkPorts(ports []Port, messages *[]string) bool {
 			errCount++
 		} else {
 			addToOutputMessages(messages, "Port Name: %s, Port: %d is available", port.Name, port.Port)
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				log.Printf("Failed to close connection: %v", err)
+			}
 		}
 	}
 	return errCount == 0
@@ -256,7 +262,9 @@ func checkEndpoints(endpoints []Endpoint, messages *[]string) bool {
 			errCount++
 		}
 
-		resp.Body.Close() // Close immediately instead of defer to prevent resource leak
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Failed to close response body: %v", err)
+		}
 	}
 	return errCount == 0
 }
@@ -277,9 +285,8 @@ func GetEnvInt(key string, fallback int) int {
 	if value, ok := os.LookupEnv(key); ok {
 		if i, err := strconv.Atoi(value); err == nil {
 			return i
-		} else {
-			log.Fatalf("Invalid value for %s: %s", key, value)
 		}
+		log.Fatalf("Invalid value for %s: %s", key, value)
 	}
 	return fallback
 }
