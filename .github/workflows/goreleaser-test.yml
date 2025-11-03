@@ -1,0 +1,79 @@
+name: Test GoReleaser
+
+on:
+  pull_request:
+    paths:
+      - '.goreleaser.yml'
+      - '.github/workflows/release.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - '**.go'
+
+permissions:
+  contents: read
+
+jobs:
+  goreleaser-check:
+    name: Test GoReleaser Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23.3'
+          cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Run GoReleaser in snapshot mode
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --skip=publish --clean
+
+      - name: Upload snapshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: goreleaser-snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.txt
+          retention-days: 7
+
+      - name: Verify artifacts were created
+        run: |
+          echo "Checking for generated artifacts..."
+          ls -lh dist/
+
+          # Verify key artifacts exist
+          if [ ! -f dist/checksums.txt ]; then
+            echo "Error: checksums.txt not found"
+            exit 1
+          fi
+
+          # Count packages
+          deb_count=$(ls -1 dist/*.deb 2>/dev/null | wc -l)
+          rpm_count=$(ls -1 dist/*.rpm 2>/dev/null | wc -l)
+          tar_count=$(ls -1 dist/*.tar.gz 2>/dev/null | wc -l)
+
+          echo "✓ Generated $deb_count .deb package(s)"
+          echo "✓ Generated $rpm_count .rpm package(s)"
+          echo "✓ Generated $tar_count .tar.gz archive(s)"
+
+          if [ $deb_count -eq 0 ] || [ $rpm_count -eq 0 ] || [ $tar_count -eq 0 ]; then
+            echo "Error: Missing expected package types"
+            exit 1
+          fi
+
+          echo "✓ All expected artifacts generated successfully"

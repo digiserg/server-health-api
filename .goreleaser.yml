@@ -1,0 +1,146 @@
+# GoReleaser configuration for Server Health API
+# Built by Digitalis.IO - https://digitalis.io/
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: server-health-api
+    binary: server-health-api
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -extldflags "-static"
+    flags:
+      - -trimpath
+
+archives:
+  - id: server-health-api
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    files:
+      - README.md
+      - LICENSE
+      - config.yaml
+      - resources/*
+
+nfpms:
+  - id: server-health-api
+    package_name: server-health-api
+    vendor: Digitalis.IO
+    homepage: https://digitalis.io/
+    maintainer: Digitalis.IO <info@digitalis.io>
+    description: |
+      Server Health API - A lightweight Go application for comprehensive
+      server health monitoring. Monitor systemd services, TCP ports, and
+      HTTP/HTTPS endpoints.
+    license: Apache 2.0
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      - src: config.yaml
+        dst: /usr/local/etc/server-health-api.yaml
+        type: config
+      - src: resources/server-health-api.service
+        dst: /etc/systemd/system/server-health-api.service
+        type: config
+    scripts:
+      postinstall: resources/post_install.sh
+    overrides:
+      deb:
+        dependencies:
+          - systemd
+      rpm:
+        dependencies:
+          - systemd
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "^style:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: "New Features"
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "Security Updates"
+      regexp: "^.*sec[(\\w)]*:+.*$"
+      order: 2
+    - title: "Performance Improvements"
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 3
+    - title: "Other Changes"
+      order: 999
+
+release:
+  github:
+    owner: digitalis-io
+    name: server-health-api
+  name_template: "Release {{.Version}}"
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Server Health API {{.Version}}
+
+    **Built by [Digitalis.IO](https://digitalis.io/)**
+
+    A lightweight Go application for comprehensive server health monitoring.
+
+    ### Installation
+
+    #### Using package managers (Recommended)
+    ```bash
+    # Debian/Ubuntu
+    sudo dpkg -i server-health-api_{{.Version}}_linux_amd64.deb
+
+    # RHEL/CentOS/Fedora
+    sudo rpm -i server-health-api_{{.Version}}_linux_amd64.rpm
+    ```
+
+    #### Manual installation
+    ```bash
+    # Extract binary
+    tar -xzf server-health-api_{{.Version}}_linux_amd64.tar.gz
+    sudo mv server-health-api /usr/local/bin/
+    sudo chmod +x /usr/local/bin/server-health-api
+    ```
+  footer: |
+    ---
+
+    **Need help?** Check out the [README](https://github.com/digitalis-io/server-health-api/blob/main/README.md)
+
+    Built with ❤️ by [Digitalis.IO](https://digitalis.io/)
+
+announce:
+  skip: true

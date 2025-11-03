@@ -5,99 +5,60 @@ on:
     tags:
       - 'v*'
 
-defaults:
-  run:
-    shell: bash
-
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
-    name: Create Release
+    name: Release with GoReleaser
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Fail if tag is not prefixed by v
+      - name: Fetch all tags
+        run: git fetch --force --tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23.3'
+          cache: true
+
+      - name: Validate tag format
         run: |
-          if [[ $GITHUB_REF_NAME =~ ^v[0-9]+\.[0-9]+\.[0-9].* ]]; then
-              echo "Valid version format"
+          if [[ $GITHUB_REF_NAME =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+              echo "✓ Valid version format: $GITHUB_REF_NAME"
           else
-              echo "Invalid version format"
+              echo "✗ Invalid version format: $GITHUB_REF_NAME"
+              echo "Expected format: v1.2.3 or v1.2.3-beta.1"
               exit 1
           fi
 
-      - name: Create release
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-        run: |
-          OPTIONS=""
-          if [[ $GITHUB_REF_NAME == *"internal"* ]]; then
-            OPTIONS="--prerelease"
-          fi
-          gh release create "$GITHUB_REF_NAME" \
-              --repo="$GITHUB_REPOSITORY" \
-              --title="Release for ${GITHUB_REF_NAME}" \
-              --generate-notes $OPTIONS
-  build:
-    runs-on: ${{ matrix.os }}
-    needs: [release]
 
-    strategy:
-      matrix:
-        include:
-          - os: [ubuntu-24.04]
-            target: Linux
-
-          - os: [ubuntu-24.04-arm]
-            target: Linux
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '>=1.23.3'
-
-    - name: Build binary
-      run: |
-        CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -a -ldflags '-extldflags "-static"' -o server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}
-
-    - name: Create release assets
-      run: |
-        sudo apt-get -y install rpm ruby-dev build-essential && sudo gem i fpm -f
-        VERSION=$(echo $GITHUB_REF_NAME | sed 's/^v//g')
-
-        mkdir -p release
-        set -x
-        for p in deb rpm zip; do
-          fpm -s dir -t ${p} --after-install resources/post_install.sh \
-            -n server-health-api -v ${VERSION} \
-            server-health-api-${{ matrix.goos }}-${{ matrix.goarch }}=/usr/local/bin/server-health-api \
-            resources/server-health-api.service=/etc/systemd/system/server-health-api.service \
-            config.yaml=/usr/local/etc/server-health-api.yaml
-        done
-
-        mv *.rpm release/
-        mv *.deb release/
-        mv *.zip release/
-        cd release
-        for f in *.zip *.deb *.rpm; do
-          sha256sum $f > $f.sha256
-        done
-
-    - name: Upload Artifacts
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          release/*.zip
-          release/*.deb
-          release/*.rpm
-          release/*.sha256
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.txt
+          retention-days: 30

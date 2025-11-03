@@ -1,5 +1,5 @@
 # Use the official Golang image as the base image
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -20,7 +20,7 @@ RUN go build -o server-health-api
 FROM alpine:latest
 
 ENV HEALTH_LISTEN_HOST="0.0.0.0"
-ENV HEALTH_LISTEN_PORT="8080"
+ENV HEALTH_LISTEN_PORT="7654"
 
 # Copy the Pre-built binary file from the previous stage
 COPY --from=builder /app/server-health-api /server-health-api

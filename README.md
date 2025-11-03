@@ -1,16 +1,30 @@
+<a href="https://digitalis.io/">
+  <img src="https://digitalis-marketplace-assets.s3.us-east-1.amazonaws.com/DigitalisDigital_DigitalisFullLogoGradient+-+medium.png" alt="Digitalis.IO" width="400"/>
+</a>
+
 # Server Health API
 
-**NOTE:** This project was entirely created using Copilot Edits as a Proof of Concept
+A lightweight Go application for comprehensive server health monitoring. This tool checks the health of various services, ports, and endpoints on a server, making it ideal for verifying server readiness before performing maintenance operations.
 
-This Go application checks the health of various services, ports, and endpoints on a server. It can be used to verify whether a server is healthy before performing maintenance on it.
+**Developed by [Digitalis.IO](https://digitalis.io/)**
 
 ## Features
 
-- Check the status of systemd services.
-- Verify the availability of TCP ports.
-- Perform HTTP requests to endpoints and check their status codes.
-- Supports SSL and basic authentication for endpoints.
-- Configurable via a YAML file.
+- **Service Health Checks**: Monitor systemd services status with validation
+- **Port Availability**: Verify TCP port accessibility (IPv4 and IPv6 support)
+- **HTTP/HTTPS Endpoint Monitoring**: Check endpoint availability and response codes
+- **Flexible Status Validation**: Support for single or multiple acceptable status codes
+- **Security Features**:
+  - Basic authentication with constant-time comparison
+  - SSL/TLS support for the API server
+  - Configurable SSL verification for monitored endpoints
+- **Production Ready**:
+  - Graceful shutdown handling (SIGINT/SIGTERM)
+  - HTTP client timeout configuration
+  - Connection pooling and reuse
+  - Thread-safe concurrent request handling
+  - Input validation and sanitization
+- **Configuration**: Flexible YAML configuration with environment variable overrides
 
 ## Configuration
 
@@ -106,3 +120,22 @@ Example response:
 ## License
 
 This project is licensed under the Apache License.
+
+---
+
+## About Digitalis.IO
+
+<a href="https://digitalis.io/">
+  <img src="https://digitalis-marketplace-assets.s3.us-east-1.amazonaws.com/DigitalisDigital_DigitalisFullLogoGradient+-+medium.png" alt="Digitalis.IO" width="300"/>
+</a>
+
+[Digitalis.IO](https://digitalis.io/) is a leading provider of cloud-native solutions and DevOps expertise. We specialize in helping organizations modernize their infrastructure, implement best practices, and achieve operational excellence.
+
+**Get in touch:**
+- Website: [https://digitalis.io/](https://digitalis.io/)
+- Solutions: Cloud Architecture, Kubernetes, DevOps, SRE
+- Services: Consulting, Training, Implementation
+
+---
+
+*Server Health API - Built with ❤️ by Digitalis.IO*

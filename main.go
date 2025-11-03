@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -8,10 +10,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	yaml "gopkg.in/yaml.v2"
@@ -59,8 +65,6 @@ type Endpoint struct {
 	Statuses []int  `yaml:"statuses"`
 }
 
-var outputMessages []string
-
 func main() {
 	configFilePath := flag.String("config", GetEnv("HEALTHCHECK_CONFIG_FILE", "config.yaml"), "Path to the config file")
 
@@ -72,31 +76,52 @@ func main() {
 	}
 
 	http.HandleFunc("/healthy", basicAuthMiddleware(config.Config.Auth, func(w http.ResponseWriter, r *http.Request) {
-		outputMessages = []string{} // Reinitialize outputMessages
+		messages := []string{} // Local variable for this request
 		response := make(map[string]interface{})
-		if !checkPorts(config.Ports) || !checkServices(config.Services) || !checkEndpoints(config.Endpoints) {
+		if !checkPorts(config.Ports, &messages) || !checkServices(config.Services, &messages) || !checkEndpoints(config.Endpoints, &messages) {
 			w.WriteHeader(http.StatusInternalServerError)
 			response["status"] = "Server is unhealthy"
 		} else {
 			w.WriteHeader(http.StatusOK)
 			response["status"] = "Server is healthy"
 		}
-		response["messages"] = outputMessages
+		response["messages"] = messages
 		json.NewEncoder(w).Encode(response)
 	}))
 
 	l := fmt.Sprintf("%s:%d", GetEnv("HEALTH_LISTEN_HOST", config.Config.Listen.Host), GetEnvInt("HEALTH_LISTEN_PORT", config.Config.Listen.Port))
-	log.Printf("Starting server on %s", l)
-	var serverErr error
-	if config.Config.SSL.Enabled {
-		serverErr = http.ListenAndServeTLS(l, config.Config.SSL.CertFile, config.Config.SSL.KeyFile, nil)
-	} else {
-		serverErr = http.ListenAndServe(l, nil)
+
+	server := &http.Server{
+		Addr:    l,
+		Handler: nil,
 	}
 
-	if serverErr != nil {
-		log.Fatalf("Failed to start server: %v", serverErr)
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Starting server on %s", l)
+		var err error
+		if config.Config.SSL.Enabled {
+			err = server.ListenAndServeTLS(config.Config.SSL.CertFile, config.Config.SSL.KeyFile)
+		} else {
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
 	}
+	log.Println("Server exited gracefully")
 }
 
 func basicAuthMiddleware(authConfig struct {
@@ -107,7 +132,9 @@ func basicAuthMiddleware(authConfig struct {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if authConfig.Enabled {
 			username, password, ok := r.BasicAuth()
-			if !ok || username != authConfig.Username || password != authConfig.Password {
+			userMatch := subtle.ConstantTimeCompare([]byte(username), []byte(authConfig.Username)) == 1
+			passMatch := subtle.ConstantTimeCompare([]byte(password), []byte(authConfig.Password)) == 1
+			if !ok || !userMatch || !passMatch {
 				w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
@@ -129,79 +156,114 @@ func readConfig(filename string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
 	return &config, nil
 }
 
-func checkServices(services []Service) bool {
-	var err_count int
+func (c *Config) Validate() error {
+	if c.Config.Listen.Port < 1 || c.Config.Listen.Port > 65535 {
+		return fmt.Errorf("invalid listen port: %d", c.Config.Listen.Port)
+	}
+	for _, port := range c.Ports {
+		if port.Port < 1 || port.Port > 65535 {
+			return fmt.Errorf("invalid port: %d for %s", port.Port, port.Name)
+		}
+	}
+	for _, endpoint := range c.Endpoints {
+		if _, err := url.Parse(endpoint.URL); err != nil {
+			return fmt.Errorf("invalid URL %s: %w", endpoint.URL, err)
+		}
+	}
+	return nil
+}
+
+var serviceNameRegex = regexp.MustCompile(`^[a-zA-Z0-9@:._-]+$`)
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+var httpsClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	},
+}
+
+func checkServices(services []Service, messages *[]string) bool {
+	var errCount int
 	for _, service := range services {
+		if !serviceNameRegex.MatchString(service.Name) {
+			addToOutputMessages(messages, "Service Name: %s is invalid", service.Name)
+			errCount++
+			continue
+		}
 		cmd := exec.Command("systemctl", "is-active", service.Name)
 		output, err := cmd.Output()
 		status := strings.TrimSpace(string(output))
 		if err != nil || status != service.Status {
-			addToOutputMessages("Service Name: %s, Expected Status: %s, Actual Status: %s", service.Name, service.Status, status)
-			err_count++
+			addToOutputMessages(messages, "Service Name: %s, Expected Status: %s, Actual Status: %s", service.Name, service.Status, status)
+			errCount++
 		} else {
-			addToOutputMessages("Service Name: %s, Status: %s is as expected", service.Name, service.Status)
+			addToOutputMessages(messages, "Service Name: %s, Status: %s is as expected", service.Name, service.Status)
 		}
 	}
-	return err_count == 0
+	return errCount == 0
 }
 
-func checkPorts(ports []Port) bool {
-	var err_count int
+func checkPorts(ports []Port, messages *[]string) bool {
+	var errCount int
 	for _, port := range ports {
-		address := fmt.Sprintf("%s:%d", port.Address, port.Port)
+		address := net.JoinHostPort(port.Address, strconv.Itoa(port.Port))
 		conn, err := net.DialTimeout("tcp", address, 1*time.Second)
 		if err != nil {
-			addToOutputMessages("Port Name: %s, Port: %d is not available", port.Name, port.Port)
-			err_count++
+			addToOutputMessages(messages, "Port Name: %s, Port: %d is not available", port.Name, port.Port)
+			errCount++
 		} else {
-			addToOutputMessages("Port Name: %s, Port: %d is available", port.Name, port.Port)
+			addToOutputMessages(messages, "Port Name: %s, Port: %d is available", port.Name, port.Port)
 			conn.Close()
 		}
 	}
-	return err_count == 0
+	return errCount == 0
 }
 
-func checkEndpoints(endpoints []Endpoint) bool {
-	var err_count int
+func checkEndpoints(endpoints []Endpoint, messages *[]string) bool {
+	var errCount int
 	for _, endpoint := range endpoints {
 		var resp *http.Response
 		var err error
 
 		if strings.HasPrefix(endpoint.URL, "https://") {
-			// Disable SSL verification
-			tr := &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
-			client := &http.Client{Transport: tr}
-			resp, err = client.Get(endpoint.URL)
+			resp, err = httpsClient.Get(endpoint.URL)
 		} else {
-			resp, err = http.Get(endpoint.URL)
+			resp, err = httpClient.Get(endpoint.URL)
 		}
 
 		if err != nil {
-			addToOutputMessages("Endpoint Name: %s, URL: %s is not reachable", endpoint.Name, endpoint.URL)
-			err_count++
+			addToOutputMessages(messages, "Endpoint Name: %s, URL: %s is not reachable", endpoint.Name, endpoint.URL)
+			errCount++
 			continue
 		}
-		defer resp.Body.Close()
 
 		statuses := append(endpoint.Statuses, endpoint.Status)
 		if contains(statuses, resp.StatusCode) {
-			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is as expected", endpoint.Name, endpoint.URL, resp.StatusCode)
+			addToOutputMessages(messages, "Endpoint Name: %s, URL: %s, Status: %d is as expected", endpoint.Name, endpoint.URL, resp.StatusCode)
 		} else {
-			addToOutputMessages("Endpoint Name: %s, URL: %s, Status: %d is not as expected, got: %d", endpoint.Name, endpoint.URL, endpoint.Status, resp.StatusCode)
-			err_count++
+			addToOutputMessages(messages, "Endpoint Name: %s, URL: %s, Status: %d is not as expected, got: %d", endpoint.Name, endpoint.URL, endpoint.Status, resp.StatusCode)
+			errCount++
 		}
+
+		resp.Body.Close() // Close immediately instead of defer to prevent resource leak
 	}
-	return err_count == 0
+	return errCount == 0
 }
 
-func addToOutputMessages(format string, a ...interface{}) {
+func addToOutputMessages(messages *[]string, format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
-	outputMessages = append(outputMessages, message)
+	*messages = append(*messages, message)
 }
 
 func GetEnv(key, fallback string) string {
